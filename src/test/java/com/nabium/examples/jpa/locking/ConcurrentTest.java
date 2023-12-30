@@ -143,6 +143,7 @@ public class ConcurrentTest implements ConcurrentTestMixin {
 
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
             Problem problem = response.getBody();
+            assertThat(problem).isNotNull();
             assertThat(problem.status()).isEqualTo(500);
             assertThat(problem.error()).isEqualTo("Internal Server Error");
         }, () -> {

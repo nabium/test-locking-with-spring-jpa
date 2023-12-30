@@ -52,7 +52,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
     private Resource setupStates = new ClassPathResource("/setup_states.sql");
 
     @Container
-    static MariaDBContainer<?> mariadb = new MariaDBContainer<>("mariadb:10.7");
+    static MariaDBContainer<?> mariadb = new MariaDBContainer<>("mariadb:11.2");
 
     @DynamicPropertySource
     static void marialProperties(DynamicPropertyRegistry registry) {
@@ -84,13 +84,13 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 // It waits 50 seconds to acquire the lock then throws error.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
                 log.info("TIMEOUT test01_findForUpdateById_with_conflict_fails_after_50seconds()");
 
                 // and timeouts after 50 seconds
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(50), Duration.ofSeconds(51));
+                assertThat(duration).isBetween(Duration.ofSeconds(49), Duration.ofSeconds(51));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -114,7 +114,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 // SELECT FOR UPDATE NOWAIT should fail if the record is locked already
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
                 log.info("TIMEOUT test02_findForUpdateNoWaitById_with_conflict_returns_immediately_with_error()");
 
@@ -128,8 +128,8 @@ public class LockingMariaTest implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test03_findForUpdateSkipLockedById_with_conflict_fails_after_50seconds() {
-        log.info("ENTER test03_findForUpdateSkipLockedById_with_conflict_fails_after_50seconds()");
+    public void test03_findForUpdateSkipLockedById_with_conflict_returns_immediately_without_data() {
+        log.info("ENTER test03_findForUpdateSkipLockedById_with_conflict_returns_immediately_without_data()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -139,19 +139,17 @@ public class LockingMariaTest implements ConcurrentTestMixin {
 
             withSingleThreadExecutor(executor -> {
                 Instant started = Instant.now();
-                Future<?> future = submitWithTran(executor,
+                Future<Optional<State>> future = submitWithTran(executor,
                         () -> repo.findForUpdateSkipLockedById(stateId));
 
-                // With MariaDB, SELECT FOR UPDATE SKIP LOCKED is not supporeted
-                assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
-                        .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
-                log.info("TIMEOUT test03_findForUpdateSkipLockedById_with_conflict_fails_after_50seconds()");
+                // SELECT FOR UPDATE SKIP LOCKED should return without result
+                // if the record is locked already
+                Optional<State> result = future.get(5, TimeUnit.SECONDS);
+                assertThat(result).isEmpty();
 
-                // and timeouts after 50 seconds
+                // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(50), Duration.ofSeconds(51));
+                assertThat(duration).isLessThan(Duration.ofSeconds(1));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -159,8 +157,8 @@ public class LockingMariaTest implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2seconds() {
-        log.info("ENTER test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2seconds()");
+    public void test05_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds() {
+        log.info("ENTER test05_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -172,16 +170,46 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 Instant started = Instant.now();
                 Future<?> future = submitWithTran(executor, () -> repo.findForUpdateWithTimeoutById(stateId));
 
-                // With MariaDB, timeout in millis is truncated to seconds.
+                // With MariaDB, timeout in millis is rounded to seconds.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
-                log.info("TIMEOUT test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2seconds()");
+                log.info("TIMEOUT test05_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
 
-                // and timeouts after 2 seconds
+                // and timeouts after 3 seconds
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(2), Duration.ofSeconds(3));
+                assertThat(duration).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(4));
+            });
+        }, () -> {
+            runSqlStatements("DELETE FROM state");
+        });
+    }
+
+    @Test
+    public void test06_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds() {
+        log.info("ENTER test06_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
+
+        final String stateId = "AL";
+        testWithTran(() -> {
+            runSqlScripts(setupStates);
+        }, () -> {
+            repo.findForShareById(stateId).orElseThrow();
+
+            withSingleThreadExecutor(executor -> {
+                Instant started = Instant.now();
+                Future<?> future = submitWithTran(executor, () -> repo.findForUpdateWithTimeout3100ById(stateId));
+
+                // With MariaDB, timeout in millis is rounded to seconds.
+                assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
+                        .isExactlyInstanceOf(ExecutionException.class)
+                        .cause()
+                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                log.info("TIMEOUT test06_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
+
+                // and timeouts after 3 seconds
+                Duration duration = Duration.between(started, Instant.now());
+                assertThat(duration).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(4));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -207,13 +235,13 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 // It waits 50 seconds to acquire the lock then throws error.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
                 log.info("TIMEOUT test11_findForShareById_with_conflict_fails_after_50seconds()");
 
                 // and timeouts after 50 seconds
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(50), Duration.ofSeconds(51));
+                assertThat(duration).isBetween(Duration.ofSeconds(49), Duration.ofSeconds(51));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -221,8 +249,8 @@ public class LockingMariaTest implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test12_findForShareNoWaitById_with_conflict_fails_after_50seconds() {
-        log.info("ENTER test12_findForShareNoWaitById_with_conflict_fails_after_50seconds()");
+    public void test12_findForShareNoWaitById_with_conflict_returns_immediately_with_error() {
+        log.info("ENTER test12_findForShareNoWaitById_with_conflict_returns_immediately_with_error()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -234,16 +262,15 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 Instant started = Instant.now();
                 Future<?> future = submitWithTran(executor, () -> repo.findForShareNoWaitById(stateId));
 
-                // With MariaDB, SELECT FOR SHARE NOWAIT is not supporeted
-                assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
+                // LOCK IN SHARE MODE NO WAIT should fail if the record is locked already
+                assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
-                log.info("TIMEOUT test12_findForShareNoWaitById_with_conflict_fails_after_50seconds()");
 
-                // and timeouts after 50 seconds
+                // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(50), Duration.ofSeconds(51));
+                assertThat(duration).isLessThan(Duration.ofSeconds(1));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -251,8 +278,8 @@ public class LockingMariaTest implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test13_findForShareSkipLockedById_with_conflict_fails_after_50seconds() {
-        log.info("ENTER test13_findForShareSkipLockedById_with_conflict_fails_after_50seconds()");
+    public void test13_findForShareSkipLockedById_with_conflict_returns_immediately_without_data() {
+        log.info("ENTER test13_findForShareSkipLockedById_with_conflict_returns_immediately_without_data()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -262,19 +289,17 @@ public class LockingMariaTest implements ConcurrentTestMixin {
 
             withSingleThreadExecutor(executor -> {
                 Instant started = Instant.now();
-                Future<?> future = submitWithTran(executor,
+                Future<Optional<State>> future = submitWithTran(executor,
                         () -> repo.findForShareSkipLockedById(stateId));
 
-                // With MariaDB, SELECT FOR SHARE SKIP LOCKED is not supporeted
-                assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
-                        .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
-                log.info("TIMEOUT test13_findForShareSkipLockedById_with_conflict_fails_after_50seconds()");
+                // LOCK IN SHARE MODE SKIP LOCKED should return without result
+                // if the record is locked already
+                Optional<State> result = future.get(5, TimeUnit.SECONDS);
+                assertThat(result).isEmpty();
 
-                // and timeouts after 50 seconds
+                // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(50), Duration.ofSeconds(51));
+                assertThat(duration).isLessThan(Duration.ofSeconds(1));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");

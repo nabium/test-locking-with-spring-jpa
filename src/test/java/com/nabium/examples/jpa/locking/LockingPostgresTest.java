@@ -54,7 +54,7 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
     private Resource setupStates = new ClassPathResource("/setup_states.sql");
 
     @Container
-    static PostgreSQLContainer<?> pgsql = new PostgreSQLContainer<>("postgres:14");
+    static PostgreSQLContainer<?> pgsql = new PostgreSQLContainer<>("postgres:16");
 
     @DynamicPropertySource
     static void pgsqlProperties(DynamicPropertyRegistry registry) {
@@ -108,7 +108,7 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
                 // SELECT FOR UPDATE NOWAIT should fail if the record is locked already
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and should return immediately
@@ -246,7 +246,7 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
                 // SELECT FOR SHARE NOWAIT should fail if the record is locked already
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and should return immediately
