@@ -18,7 +18,7 @@ public class StateService {
     }
 
     public State getState(String id) {
-        return repo.getById(id);
+        return repo.findById(id).orElseThrow();
     }
 
     @Transactional

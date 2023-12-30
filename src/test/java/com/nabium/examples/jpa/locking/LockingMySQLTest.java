@@ -53,7 +53,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
     private Resource setupStates = new ClassPathResource("/setup_states.sql");
 
     @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8");
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.2");
 
     @DynamicPropertySource
     static void mysqlProperties(DynamicPropertyRegistry registry) {
@@ -85,7 +85,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 // It waits 50 seconds to acquire the lock then throws error.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and timeouts after 50 seconds
@@ -114,7 +114,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 // SELECT FOR UPDATE NOWAIT should fail if the record is locked already
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and should return immediately
@@ -205,7 +205,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 // With MySQL, value of the timeout is ignored.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and timeouts after 50 seconds
@@ -235,7 +235,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 // It waits 50 seconds to acquire the lock then throws error.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and timeouts after 50 seconds
@@ -265,7 +265,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 // SELECT FOR SHARE NOWAIT should fail if the record is locked already
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
-                        .getCause()
+                        .cause()
                         .isExactlyInstanceOf(PessimisticLockingFailureException.class);
 
                 // and should return immediately
