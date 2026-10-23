@@ -19,7 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -53,7 +53,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
     private Resource setupStates = new ClassPathResource("/setup_states.sql");
 
     @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.2");
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:9.7");
 
     @DynamicPropertySource
     static void mysqlProperties(DynamicPropertyRegistry registry) {
@@ -86,7 +86,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and timeouts after 50 seconds
                 Duration duration = Duration.between(started, Instant.now());
@@ -115,7 +115,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
@@ -206,7 +206,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and timeouts after 50 seconds
                 Duration duration = Duration.between(started, Instant.now());
@@ -236,7 +236,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and timeouts after 50 seconds
                 Duration duration = Duration.between(started, Instant.now());
@@ -266,7 +266,7 @@ public class LockingMySQLTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());

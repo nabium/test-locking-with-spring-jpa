@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -54,7 +54,7 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
     private Resource setupStates = new ClassPathResource("/setup_states.sql");
 
     @Container
-    static PostgreSQLContainer<?> pgsql = new PostgreSQLContainer<>("postgres:16");
+    static PostgreSQLContainer<?> pgsql = new PostgreSQLContainer<>("postgres:18");
 
     @DynamicPropertySource
     static void pgsqlProperties(DynamicPropertyRegistry registry) {
@@ -109,7 +109,7 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
@@ -185,8 +185,8 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test05_findForUpdateWithTimeoutById_with_conflict_waits_infinitely() {
-        log.info("ENTER test05_findForUpdateWithTimeoutById_with_conflict_waits_infinitely()");
+    public void test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2900millis() {
+        log.info("ENTER test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2900millis()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -195,11 +195,18 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
             repo.findForShareById(stateId).orElseThrow();
 
             withSingleThreadExecutor(executor -> {
+                Instant started = Instant.now();
                 Future<?> future = submitWithTran(executor, () -> repo.findForUpdateWithTimeoutById(stateId));
 
                 // With PostgreSQL, value of the timeout is ignored, and waits infinitely.
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
-                        .isExactlyInstanceOf(TimeoutException.class);
+                        .isExactlyInstanceOf(ExecutionException.class)
+                        .cause()
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
+
+                // and timeouts after 2900 milliseconds
+                Duration duration = Duration.between(started, Instant.now());
+                assertThat(duration).isBetween(Duration.ofMillis(2900), Duration.ofSeconds(4));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -247,7 +254,7 @@ public class LockingPostgresTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());

@@ -2,16 +2,15 @@ package com.nabium.examples.jpa.locking;
 
 import static org.assertj.core.api.Assertions.*;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
-import org.hibernate.TransactionException;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -19,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.orm.jpa.JpaSystemException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import lombok.Getter;
@@ -61,23 +60,10 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 Future<?> future = submitWithTran(executor, () -> repo.findForUpdateById(stateId));
 
                 // With H2 Database, SELECT FOR UPDATE does not wait infinitely.
-                // It waits 2000 milliseconds to acquire the lock and on failure,
-                // **closes** connection and throws PessimisticLockingFailureException.
-                // @Transactional annotaion tries to rollback the transaction but fails with the
-                // closed connection and throws JpaSystemException, overriding
-                // PessimisticLockingFailureException.
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // timeouts after 2 seconds, sometimes more
                 Duration duration = Duration.between(started, Instant.now());
@@ -89,8 +75,8 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test02_findForUpdateNoWaitById_with_conflict_fails_after_2sec() {
-        log.info("ENTER test02_findForUpdateNoWaitById_with_conflict_fails_after_2sec()");
+    public void test02_findForUpdateNoWaitById_with_conflict_fails_immediately() {
+        log.info("ENTER test02_findForUpdateNoWaitById_with_conflict_fails_immediately()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -102,24 +88,15 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 Instant started = Instant.now();
                 Future<?> future = submitWithTran(executor, () -> repo.findForUpdateNoWaitById(stateId));
 
-                // With H2 Database, SELECT FOR UPDATE NOWAIT is not supported.
-                // It's behaviour is same as SELECT FOR UPDATE.
+                // H2 Database now suppports SELECT FOR UPDATENOWAIT.
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
-                // timeouts after 2 seconds, sometimes more
+                // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(2), Duration.ofSeconds(5));
+                assertThat(duration).isLessThan(Duration.ofSeconds(1));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -127,9 +104,9 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test03_findForUpdateSkipLockedById_with_conflict_fails_after_2sec() {
+    public void test03_findForUpdateSkipLockedById_with_conflict_returns_immediately_without_data() {
         log.info(
-                "ENTER test03_findForUpdateSkipLockedById_with_conflict_fails_after_2sec()");
+                "ENTER test03_findForUpdateSkipLockedById_with_conflict_returns_immediately_without_data()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -139,26 +116,19 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
 
             withSingleThreadExecutor(executor -> {
                 Instant started = Instant.now();
-                Future<?> future = submitWithTran(executor, () -> repo.findForUpdateSkipLockedById(stateId));
+                Future<Optional<State>> future = submitWithTran(executor,
+                        () -> repo.findForUpdateSkipLockedById(stateId));
 
-                // With H2 Database, SELECT FOR UPDATE SKIP LOCKED is not supported.
-                // It's behaviour is same as SELECT FOR UPDATE.
-                assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
-                        .isExactlyInstanceOf(ExecutionException.class)
-                        .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                // H2 Database now supports SELECT FOR UPDATESKIP LOCKED.
 
-                // timeouts after 2 seconds, sometimes more
+                // SELECT FOR UPDATE SKIP LOCKED should return without result
+                // if the record is locked already
+                Optional<State> result = future.get(5, TimeUnit.SECONDS);
+                assertThat(result).isEmpty();
+
+                // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(2), Duration.ofSeconds(5));
+                assertThat(duration).isLessThan(Duration.ofSeconds(1));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -166,8 +136,8 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
     }
 
     @Test
-    public void test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2sec() {
-        log.info("ENTER test05_findForUpdateWithTimeoutById_with_conflict_fails_after_2sec()");
+    public void test05_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds() {
+        log.info("ENTER test05_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
 
         final String stateId = "AL";
         testWithTran(() -> {
@@ -179,23 +149,15 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 Instant started = Instant.now();
                 Future<?> future = submitWithTran(executor, () -> repo.findForUpdateWithTimeoutById(stateId));
 
-                // With H2 Database, value of the timeout is ignored.
+                // H2 Database now supports timeout in order of seconds, 2900 becomes 3.
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // timeouts after 2 seconds, sometimes more
                 Duration duration = Duration.between(started, Instant.now());
-                assertThat(duration).isBetween(Duration.ofSeconds(2), Duration.ofSeconds(5));
+                assertThat(duration).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(4));
             });
         }, () -> {
             runSqlStatements("DELETE FROM state");
@@ -221,15 +183,7 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // timeouts after 2 seconds, sometimes more
                 Duration duration = Duration.between(started, Instant.now());
@@ -259,15 +213,7 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // timeouts after 2 seconds, sometimes more
                 Duration duration = Duration.between(started, Instant.now());
@@ -298,15 +244,7 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // timeouts after 2 seconds, sometimes more
                 Duration duration = Duration.between(started, Instant.now());
@@ -336,15 +274,7 @@ public class LockingEmbeddedH2Test implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(JpaSystemException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(TransactionException.class)
-                        .hasMessage("Unable to rollback against JDBC Connection")
-                        .cause()
-                        .isExactlyInstanceOf(SQLException.class)
-                        .hasMessage("Connection is closed")
-                        .hasNoCause();
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // timeouts after 2 seconds, sometimes more
                 Duration duration = Duration.between(started, Instant.now());

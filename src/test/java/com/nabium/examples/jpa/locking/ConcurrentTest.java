@@ -11,11 +11,12 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.AutoConfigureTestEntityManager;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.boot.jpa.test.autoconfigure.AutoConfigureTestEntityManager;
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpMethod;
@@ -37,10 +38,11 @@ import lombok.extern.slf4j.Slf4j;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT,
         // We need to start container before WebMVC
         properties = {
-                "spring.datasource.url=jdbc:tc:postgresql:14:///sjedb",
+                "spring.datasource.url=jdbc:tc:postgresql:18:///sjedb",
                 "spring.jpa.hibernate.ddl-auto=create-drop"
         })
 @AutoConfigureTestEntityManager
+@AutoConfigureTestRestTemplate
 public class ConcurrentTest implements ConcurrentTestMixin {
 
     @Getter
