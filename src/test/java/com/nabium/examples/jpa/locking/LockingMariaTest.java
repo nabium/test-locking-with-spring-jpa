@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
-import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -52,7 +52,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
     private Resource setupStates = new ClassPathResource("/setup_states.sql");
 
     @Container
-    static MariaDBContainer<?> mariadb = new MariaDBContainer<>("mariadb:11.2");
+    static MariaDBContainer<?> mariadb = new MariaDBContainer<>("mariadb:13.0");
 
     @DynamicPropertySource
     static void marialProperties(DynamicPropertyRegistry registry) {
@@ -85,7 +85,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
                 log.info("TIMEOUT test01_findForUpdateById_with_conflict_fails_after_50seconds()");
 
                 // and timeouts after 50 seconds
@@ -115,7 +115,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
                 log.info("TIMEOUT test02_findForUpdateNoWaitById_with_conflict_returns_immediately_with_error()");
 
                 // and should return immediately
@@ -174,7 +174,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
                 log.info("TIMEOUT test05_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
 
                 // and timeouts after 3 seconds
@@ -204,7 +204,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
                 log.info("TIMEOUT test06_findForUpdateWithTimeoutById_with_conflict_fails_after_3seconds()");
 
                 // and timeouts after 3 seconds
@@ -236,7 +236,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(60, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
                 log.info("TIMEOUT test11_findForShareById_with_conflict_fails_after_50seconds()");
 
                 // and timeouts after 50 seconds
@@ -266,7 +266,7 @@ public class LockingMariaTest implements ConcurrentTestMixin {
                 assertThatThrownBy(() -> future.get(10, TimeUnit.SECONDS))
                         .isExactlyInstanceOf(ExecutionException.class)
                         .cause()
-                        .isExactlyInstanceOf(PessimisticLockingFailureException.class);
+                        .isExactlyInstanceOf(CannotAcquireLockException.class);
 
                 // and should return immediately
                 Duration duration = Duration.between(started, Instant.now());
